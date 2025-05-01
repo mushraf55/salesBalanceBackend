@@ -8,6 +8,7 @@ const PORT = process.env.PORT || 7500;
 const productRoutes = require("./routes/ProductRoute");
 const saleRoutes = require("./routes/SalesRoute");
 const authRoutes = require("./routes/auth");
+const ReportNoRoutes = require("./routes/GenerateReportNo")
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes); // Auth route handles login/signup
 app.use("/api/products", productRoutes); // Auth handled inside each route
 app.use("/api/sales", saleRoutes); // Same here if applicable
+app.use("/api/reportNumber", ReportNoRoutes)
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, {

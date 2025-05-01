@@ -6,6 +6,8 @@ const saleSchema = new mongoose.Schema({
   quantity: Number,
   price: Number,
   customer: String,
+  vat: Number,          
+  total: Number, 
   po: String,
   invoice: String,
   soldBy: String, // name of seller (admin or salesperson)

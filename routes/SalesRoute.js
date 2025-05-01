@@ -3,19 +3,18 @@ const router = express.Router();
 const Sale = require("../models/Sale");
 const Product = require("../models/Product");
 const authMiddleware = require("../middleware/authMiddleware");
-const mongoose = require("mongoose"); // for transactions
+const mongoose = require("mongoose");
+const { sendReorderEmail } = require("../mailSystem"); // ⬅️ Import this
 
 // Sell Product (admin and sales)
 router.post("/sell", authMiddleware(["admin", "sales"]), async (req, res) => {
   const { date, product, quantity, price, customer, po, invoice } = req.body;
-  const { name } = req.user; // Get the name of the person selling the product
+  const { name } = req.user;
 
-  // Validate required fields
   if (!product || !quantity || !price || !customer) {
     return res.status(400).json({ error: "Required fields are missing" });
   }
 
-  // Ensure quantity and price are valid
   if (quantity <= 0 || isNaN(quantity)) {
     return res.status(400).json({ error: "Quantity should be a positive number" });
   }
@@ -25,38 +24,45 @@ router.post("/sell", authMiddleware(["admin", "sales"]), async (req, res) => {
   }
 
   try {
-    // Find the product in the available stock
     const productInStock = await Product.findOne({ product });
 
     if (!productInStock) {
       return res.status(404).json({ error: "Product not found in stock" });
     }
 
-    // Check if sufficient quantity is available
     if (productInStock.quantity < quantity) {
       return res.status(400).json({ error: "Insufficient stock available" });
     }
 
-    // Record the sale
+    const subtotal = price * quantity;
+    const vat = parseFloat((subtotal * 0.05).toFixed(2));
+    const total = parseFloat((subtotal + vat).toFixed(2));
+
     const sale = new Sale({
       date,
       product,
       quantity,
       price,
       customer,
+      vat,
+      total,
       po,
       invoice,
       soldBy: name,
     });
 
-    // Save the sale
     await sale.save();
 
-    // Deduct the quantity from available stock
+    // Deduct quantity from stock
     productInStock.quantity -= quantity;
     await productInStock.save();
 
-    // Send the response
+    // ✅ Trigger reorder email if quantity falls below or equal to reorder level
+    if (productInStock.quantity <= productInStock.reorder) {
+      await sendReorderEmail(productInStock.product, productInStock.quantity, productInStock.reorder);
+      console.log("🔔 Reorder email triggered after sale for:", productInStock.product);
+    }
+
     res.status(201).json({
       success: true,
       message: "Product sold successfully!",
@@ -67,17 +73,4 @@ router.post("/sell", authMiddleware(["admin", "sales"]), async (req, res) => {
     res.status(500).json({ error: "Failed to sell product. Please try again." });
   }
 });
-
-
-// Get Sold Items
-router.get("/", async (req, res) => {
-  try {
-    const sales = await Sale.find();
-    res.json(sales);
-  } catch (err) {
-    console.error("Error fetching sales:", err);
-    res.status(500).json({ error: "Failed to fetch sales data" });
-  }
-});
-
 module.exports = router;
